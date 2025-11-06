@@ -13,15 +13,15 @@ thread.start()
 fb = Firebase(computer)
 user = fb.login("johnlloydunida0@gmail.com", "password")
 
-#fb.upload_file(user, './test.txt', 'documents/new_test.txt')
+#fb.upload_file(user, 'hotdog.txt', './test.txt')
 #print(fb.get_owned_files(user))
-#fb.update_file(user, 'hello.txt', './test.txt')
+#fb.update_file(user, 'documents/minecraft.txt', './test.txt')
 #print(fb.get_file(user, 'hello.txt'))
 
 
-cur_dir = ['.']
+cur_dir = []
 while True:
-    root = fb.get_owned_files(user).get('users', {}).get(user.localId, {}).get('owned_files', {})
+    root = fb.get_owned_files(user)
     for directory in cur_dir:
         if (len(directory) > 1):
             root = root.get(directory, {})
@@ -45,11 +45,11 @@ while True:
     else:
         action = input("Do you want read (r) or delete (d) the file: ")
         if (action == 'd'):
-            print("Deleting file in", f"users/{user.localId}/owned_files/"+"/".join(cur_dir[1:]))
-            fb.delete_owned_file(user, keys[choice][0], f"users/{user.localId}/owned_files/"+"/".join(cur_dir[1:]))
+            print("Deleting file in", f"users/{user.localId}/owned_files/"+"/".join(cur_dir))
+            fb.delete_owned_file(user, keys[choice][0], "/".join(cur_dir))
         else:
             print(f'reading file {keys[choice][0]}')
-            with open(fb.get_file(user, keys[choice][0]), 'r') as f:
+            with open(fb.get_file(user, "/".join(cur_dir)+"/"+keys[choice][0]), 'r') as f:
                 for line in f.readlines():
                     print(line, '\n')
             input("enter to continue...")

@@ -1,7 +1,12 @@
+# Created by venv; see https://docs.python.org/3/library/venv.html
 /__pycache__
 /file_cache
+/include
+/Lib
+/Scripts
+/share
 
-Pipfile
-Pipfile.lock
-*.json
 .env
+*.json
+pyvenv.cfg
+

@@ -38,30 +38,21 @@ class Firebase:
         result = self.auth.create_user_with_email_and_password(user.email, user.password)
         user.setup_account(result)
     
-    def upload_file(self, user:User, file_path:str, cloud_path:str):
-        path = ['users', user.localId, 'owned_files']
-        path.extend(cloud_path.split("/"))
+    def upload_file(self, user:User, cloud_path:str, file_path:str):
+        cloud_path = cloud_path.strip("/")
+        path = cloud_path.split("/")
         file_name = path.pop()
-        upload_process = UploadProcess(firebaseConfig["storageBucket"], user, file_name, file_path, datetime.now().timestamp())
+        upload_process = UploadProcess(firebaseConfig["storageBucket"], user, cloud_path, file_path, datetime.now().timestamp())
         self.computer.add_process(upload_process)
         while (not upload_process.is_completed()):
             print("Uploading...")
             sleep(0.5)
-        self.storage.child(f'files/{user.localId}/{file_name}').put(file_path, token=user.idToken)
 
-        root = self.db
-        files = self.get_owned_files(user)
-        for directory in path:
-            if (len(directory) > 1 and 'type' not in files):
-                root = root.child(directory)
-                files = files.get(directory, {})
-        files[file_name.replace(".", "&123")] = {'type':'file'}
-        root.set(files, token=user.idToken)
-
-        self.db.child('files').child(user.localId).child(file_name.replace(".", "&123")).set({'modified':datetime.now().isoformat()}, token=user.idToken)
+        data = {file_name.replace(".", "&123"):{'type':'file', 'modified':datetime.now().isoformat()}}
+        self.db.child('users').child(user.localId).child('owned_files').child(*tuple(path)).update(data, token=user.idToken)
 
     def get_owned_files(self, user:User) -> dict:
-        files = self.db.get(token=user.idToken).val()
+        files = self.db.child('users').child(user.localId).child('owned_files').get(token=user.idToken).val()
         return files if (files) else {}
     
     def file_is_owned(self, user:User, file_name:str, d:dict) -> bool:
@@ -78,44 +69,51 @@ class Firebase:
         files = self.db.child('users').child(user.localId).child('access_list').get(token=user.idToken).val()
         return files if (files) else []
 
-    def update_file(self, user:User, file_name:str, file_path:str):
-        self.storage.child(f'files/{user.localId}/{file_name}').put(file_path, token=user.idToken)
-        self.db.child('files').child(user.localId).child(file_name.replace(".", "&123")).update({'modified':datetime.now().isoformat()}, token=user.idToken)
+    def update_file(self, user:User, cloud_path:str, file_path:str):
+        cloud_path = cloud_path.strip("/")
+        process = UploadProcess(firebaseConfig["storageBucket"], user, cloud_path, file_path, datetime.now().timestamp())
+        self.computer.add_process(process)
+        while (not process.is_completed()):
+            print("Uploading...")
+            sleep(0.5)
+        self.db.child('users').child(user.localId).child('owned_files').child(*tuple(cloud_path.replace(".", "&123").split("/"))).update({'modified':datetime.now().isoformat()}, token=user.idToken)
 
-    def delete_owned_file(self, user:User, file_name:str, cloud_path:str):
-        if (not self.file_is_owned(user, file_name, self.get_owned_file_ids(user).get('users'))):
+    def delete_owned_file(self, user:User, cloud_path:str):
+        cloud_path = cloud_path.strip("/")
+        if (not self.file_is_owned(user, cloud_path.split("/")[-1], self.get_owned_file_ids(user).get('users'))):
             print("File is not owned by the user. Can't delete it")
             return
-        self.storage.delete(f'files/{user.localId}/{file_name}', user.idToken)
-        self.db.child('files').child(user.localId).child(file_name.replace(".", "&123")).set(None, token=user.idToken)
-        root = self.db
-        for directory in cloud_path.split("/"):
-            if (len(directory) > 1):
-             root = root.child(directory)
-        root.child(file_name.replace(".", "&123")).set(None, token=user.idToken)
+        self.storage.delete(f'files/{user.localId}/{cloud_path}', user.idToken)
+        self.db.child('users').child(user.localId).child('owned_files').child(*tuple(cloud_path.replace(".", "&123").split("/"))).set(None, token=user.idToken)
         print("File is deleted")
 
 
-    def get_file(self, user:User, file_name:str) -> str:
-        file = self.db.child('files').child(user.localId).child(file_name.replace(".", "&123")).get(token=user.idToken).val()
+    def get_file(self, user:User, cloud_path:str) -> str:
+        cloud_path = cloud_path.strip("/")
+        file = self.db.child('users').child(user.localId).child('owned_files').child(*tuple(cloud_path.replace(".", "&123").split("/"))).get(token=user.idToken).val()
         if (not file):
             return None
         
         try:
-            with open(f"./file_cache/meta/{file_name.replace(".", "&123")}.json", 'r') as f:
+            with open(f"{os.environ.get("CACHE_PATH")}/meta/{cloud_path.replace(".", "&123")}.json", 'r') as f:
                 cache_meta:dict = json.loads(f.read())
         except FileNotFoundError:
             cache_meta = {}
         
         if (cache_meta.get("modified") != file.get('modified', '')):
             print('file is outdated')
-            url = self.storage.child(f'files/{user.localId}/{file_name}').get_url(user.idToken)
-            process = DownloadProcess(url, user, file_name, datetime.now().timestamp())
+            url = self.storage.child(f'files/{user.localId}/{cloud_path}').get_url(user.idToken)
+            process = DownloadProcess(url, user, cloud_path, datetime.now().timestamp())
             self.computer.add_process(process)
             while (not process.is_completed()):
                 print("Downloading...")
                 sleep(0.5)
-            with open(f'./file_cache/meta/{file_name.replace(".", "&123")}.json', 'w') as f:
-                f.write(json.dumps(file))
-        return f"{os.environ.get("CACHE_PATH")}/{file_name}"
+            try:
+                with open(f"{os.environ.get("CACHE_PATH")}/meta/{cloud_path.replace(".", "&123")}.json", 'w') as f:
+                    f.write(json.dumps(file))
+            except FileNotFoundError:
+                os.makedirs(f"{os.environ.get('CACHE_PATH')}/meta/{'/'.join(cloud_path.split('/')[:-1])}", exist_ok=True)
+                with open(f"{os.environ.get('CACHE_PATH')}/meta/{cloud_path.replace('.', '&123')}.json", 'w') as f:
+                    f.write(json.dumps(file))
+        return f"{os.environ.get("CACHE_PATH")}/{cloud_path}"
 

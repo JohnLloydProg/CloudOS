@@ -47,8 +47,13 @@ class DownloadProcess(Process):
         super().__init__(user, arrival_time)
         self.download_link = download_link
         self.file_name = file_name
-        with open(f'{os.environ.get("CACHE_PATH")}/{file_name}', 'wb') as f:
-            f.write(b'')
+        try:
+            with open(f'{os.environ.get("CACHE_PATH")}/{file_name}', 'wb') as f:
+                f.write(b'')
+        except FileNotFoundError:
+            os.makedirs(f'{os.environ.get("CACHE_PATH")}/{"/".join(self.file_name.split("/")[:-1])}', exist_ok=True)
+            with open(f'{os.environ.get("CACHE_PATH")}/{file_name}', 'wb') as f:
+                f.write(b'')
         r = requests.get(self.download_link, headers={"Authorization": "Bearer "+self.user.idToken, "Range":f"bytes=0-0"})
         if (r.ok):
             total = r.headers.get("Content-Range").split("/")[1]
