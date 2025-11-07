@@ -5,6 +5,7 @@ from scheduling import Computer, UploadProcess, DownloadProcess
 from typing import Callable
 from threading import Thread
 from time import sleep
+import atexit
 import json
 import os
 
@@ -32,7 +33,8 @@ class CustomThread(Thread):
     
     def run(self):
         result = self.target(*self.args)
-        self.on_finish(result)
+        if (self.on_finish):
+            self.on_finish(result)
 
 
 class Firebase:
@@ -40,9 +42,13 @@ class Firebase:
     auth = fb.auth()
     db = fb.database()
     storage = fb.storage()
+    lock_refs = []
 
     def __init__(self, computer:Computer):
         self.computer = computer
+
+    def clean_at_exit(self, user:User):
+        atexit.register(lambda: self.clean_locked_paths(user))
 
     def lock_path(self, user:User, cloud_path:str, operation:str):
         if (operation not in ['write', 'read']):
@@ -58,10 +64,15 @@ class Firebase:
             sleep(1)
         locks[lock_ref] = operation
         self.db.child("locks").child(user.localId).update(locks, token=user.idToken)
+        self.lock_refs.append(lock_ref)
         return lock_ref
 
     def unlock_path(self, user:User, lock_ref:str):
         self.db.child("locks").child(user.localId).child(lock_ref).set(None, token=user.idToken)
+
+    def clean_locked_paths(self, user:User):
+        for lock_ref in self.lock_refs:
+            self.unlock_path(user, lock_ref)
 
     def login(self, email:str, password:str) -> User:
         result = self.auth.sign_in_with_email_and_password(email, password)
@@ -169,13 +180,13 @@ class Firebase:
                     f.write(json.dumps(file))
         return f"{os.environ.get("CACHE_PATH")}/{cloud_path}"
 
-    def upload_thread(self, user:User, cloud_path:str, file_path:str, on_finish:Callable):
+    def upload_thread(self, user:User, cloud_path:str, file_path:str, on_finish:Callable=None):
         CustomThread(self.upload_file, args=(user, cloud_path, file_path), on_finish=on_finish).start()
     
-    def get_thread(self, user:User, cloud_path:str, on_finish:Callable):
+    def get_thread(self, user:User, cloud_path:str, on_finish:Callable=None):
         CustomThread(self.get_file, args=(user, cloud_path), on_finish=on_finish).start()
     
-    def update_thread(self, user:User, cloud_path:str, file_path:str, on_finish:Callable):
+    def update_thread(self, user:User, cloud_path:str, file_path:str, on_finish:Callable=None):
         CustomThread(self.update_file, args=(user, cloud_path, file_path), on_finish=on_finish).start()
 
 
