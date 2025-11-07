@@ -80,9 +80,11 @@ class Firebase:
     @connection_try_decorator
     def login(self, email:str, password:str) -> User:
         result = self.auth.sign_in_with_email_and_password(email, password)
-        user = User(email, password)
-        user.setup_account(result)
-        return user
+        if (result):
+            user = User(email, password)
+            user.setup_account(result)
+            return user
+        return None
     
     @connection_try_decorator
     def register(self, user:User):

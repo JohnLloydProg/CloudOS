@@ -1,46 +1,24 @@
 import customtkinter as ctk
+from objects import User
+from firebase import Firebase
+from scheduling import Computer
 from desktop.login import LoginWindow
 from desktop.taskbar import Taskbar
 from desktop.desktop import Desktop
 from desktop.splash import SplashScreen
+from threading import Thread
+from dotenv import load_dotenv
 import os
 import sys
 from tkinter import font as tkfont
 
 
-WINDOW_W, WINDOW_H = 1200, 720
+#WINDOW_W, WINDOW_H = 1200, 720
 
 def create_root():
     app = ctk.CTk()
-    app.title("Welcome")
-
-    # Base size
-    app.geometry(f"{WINDOW_W}x{WINDOW_H}")
-    app.minsize(WINDOW_W, WINDOW_H)
-
-    # Must be True so maximize works; we'll "lock" size manually in normal state
-    app.resizable(True, True)
-
-    lock_w, lock_h = WINDOW_W, WINDOW_H
-
-    def on_configure(event=None):
-        """
-        Enforce fixed size ONLY in normal state.
-        Allow maximize / minimize / fullscreen without fighting Tk.
-        """
-        state = app.state()
-
-        # When maximized ("zoomed") or minimized/iconic etc., do nothing.
-        if state != "normal":
-            return
-
-        # If user tried to resize in normal state, snap back to 1200x720
-        cur_w, cur_h = app.winfo_width(), app.winfo_height()
-        if cur_w != lock_w or cur_h != lock_h:
-            app.geometry(f"{lock_w}x{lock_h}")
-
-    # This is fine with CustomTkinter; CTk subclasses Tk and supports bind()
-    app.bind("<Configure>", on_configure)
+    app.overrideredirect(True)
+    app.geometry(f"{app.winfo_screenwidth()}x{app.winfo_screenheight()}+0+0")
 
     return app
 
@@ -73,15 +51,10 @@ def main():
     ctk.set_appearance_mode("light")
     ctk.set_default_color_theme("green")
 
+    computer = Computer()
+    firebase = Firebase(computer)
     app = create_root()
     load_custom_fonts()
-
-    # center window
-    app.update_idletasks()
-    sw, sh = app.winfo_screenwidth(), app.winfo_screenheight()
-    x = (sw // 2) - (WINDOW_W // 2)
-    y = (sh // 2) - (WINDOW_H // 2)
-    app.geometry(f"{WINDOW_W}x{WINDOW_H}+{x}+{y}")
 
     # base layout
     app.grid_rowconfigure(0, weight=1)
@@ -121,7 +94,7 @@ def main():
                 app.attributes("-alpha", 1.0)
 
     # ---------- Desktop builder -----------------------------------------
-    def build_desktop(user=None, pwd=None):
+    def build_desktop(user:User):
         """Create the desktop UI (no fade logic here; handled outside)."""
         # clear everything
         for w in app.winfo_children():
@@ -141,7 +114,7 @@ def main():
         taskbar = Taskbar(app)
         taskbar.grid(row=0, column=0, sticky="nsw", padx=8, pady=8)
 
-        desktop = Desktop(app)
+        desktop = Desktop(app, firebase, user)
         desktop.grid(row=0, column=1, sticky="nsew", padx=(0, 8), pady=8)
 
         # ----- Logout -> back to login with fade + no splash --------------
@@ -160,7 +133,7 @@ def main():
                 app.grid_columnconfigure(0, weight=1)
 
                 app.title("Login")
-                LoginWindow(app, on_success=start_splash_sequence)
+                LoginWindow(app, firebase, on_success=start_splash_sequence)
 
 
             fade_transition(fade_out=True, callback=rebuild_login)
@@ -177,7 +150,7 @@ def main():
             taskbar.on_shutdown = app.destroy
 
     # ---------- Login -> Splash -> Desktop chain -------------------------
-    def start_splash_sequence(user, pwd):
+    def start_splash_sequence(user:User):
 
         def show_splash():
             # clear login widgets
@@ -191,7 +164,7 @@ def main():
 
             # when splash completes, we trigger fade -> desktop
             def splash_done():
-                build_desktop(user, pwd)
+                build_desktop(user)
 
             splash = SplashScreen(app, duration=3000, on_done=splash_done)
             splash.grid(row=0, column=0, sticky="nsew")
@@ -212,7 +185,7 @@ def main():
         app.grid_columnconfigure(0, weight=1)
         app.title("Welcome")
 
-        LoginWindow(app, on_success=start_splash_sequence)
+        LoginWindow(app, firebase, on_success=start_splash_sequence)
 
         fade_transition(fade_out=False)
 
@@ -220,8 +193,12 @@ def main():
     # build login immediately (invisible), then fade in
     show_login_initial()
 
+    
+    process = Thread(target=computer.run, daemon=True)
+    app.after(100, lambda: process.start())
     app.mainloop()
 
 
 if __name__ == "__main__":
+    load_dotenv()
     main()

@@ -1,8 +1,11 @@
 from time import sleep
+from logging import getLogger
 import scheduling
 
 
 def connection_try_decorator(func):
+    logger = getLogger()
+
     def wrapper(self, *args, **kwargs):
         max_tries = 3
         tries = 0
@@ -10,8 +13,9 @@ def connection_try_decorator(func):
             try:
                 result = func(self, *args, **kwargs)
                 return result
-            except:
+            except ConnectionError as e:
                 print(f"An error occured. Retrying the request... ({tries}/{max_tries})")
+                logger.error(str(e))
                 tries += 1
                 sleep(5)
 

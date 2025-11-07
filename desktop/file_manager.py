@@ -1,4 +1,7 @@
 import customtkinter as ctk
+from typing import Callable
+from firebase import Firebase
+from objects import User
 from PIL import Image, ImageOps
 import datetime as _dt
 from pathlib import Path
@@ -72,8 +75,12 @@ def _tinted_ctkimage_from_png(path: Path, size):
 
 class FileManager(ctk.CTkFrame):
     """Compact file manager with Back ←, path text, and list/grid toggle."""
-    def __init__(self, parent):
+    def __init__(self, parent:ctk.CTkFrame, firebase:Firebase, user:User, on_text_file:Callable):
         super().__init__(parent, fg_color=GREEN_0, corner_radius=16)
+        self.firebase = firebase
+        self.user = user
+        self.parent = parent
+        self.on_text_file = on_text_file
 
         # Fonts (create after root exists)
                 # Fonts (create after root exists)
@@ -98,8 +105,6 @@ class FileManager(ctk.CTkFrame):
 
         self._selected_widget = None
         self.selected = None   # (kind, name)
-        self.fb = None         # set later when you integrate Firebase
-        self.user = None
 
         # Performance helpers
         self._render_after_id = None
@@ -114,7 +119,7 @@ class FileManager(ctk.CTkFrame):
         self._build_topbar()
         self._build_browser()
 
-        self._load_sample("/")  # demo data (replace via load_directory)
+        self.load_directory("/")  # demo data (replace via load_directory)
         self._render()
 
         # Debounced reflow on width changes
@@ -196,36 +201,11 @@ class FileManager(ctk.CTkFrame):
         self.scroll = ctk.CTkScrollableFrame(wrap, fg_color="transparent", corner_radius=16)
         self.scroll.grid(row=0, column=0, sticky="nsew", padx=12, pady=12)
 
-    # --- Demo data (replace with backend via load_directory) --------------
-    def _load_sample(self, path: str):
-        today = _dt.date.today().isoformat()
-        if path == "/":
-            self.entries = [
-                ("folder", "Documents", "-", today),
-                ("folder", "Pictures", "-", today),
-                ("text",   "notes.txt", "2 KB", today),
-                ("image",  "field.png", "1.2 MB", today),
-                ("audio",  "sleepy-green.mp3", "3.1 MB", today),
-                ("video",  "clip.mp4", "24 MB", today),
-            ]
-        elif path == "/Documents":
-            self.entries = [
-                ("text", "todo.txt", "1 KB", today),
-                ("text", "draft.md", "4 KB", today),
-            ]
-        elif path == "/Pictures":
-            self.entries = [
-                ("image", "meadow.jpg", "900 KB", today),
-                ("image", "lake.png", "1.1 MB", today),
-            ]
-        else:
-            self.entries = []
-
     # --- Navigation -------------------------------------------------------
     def open_folder(self, name: str):
         self.history.append(self.path)
         self.path = (self.path.rstrip("/") + "/" + name).replace("//", "/")
-        self._load_sample(self.path)    # replace with backend list
+        self.load_directory(self.path)    # replace with backend list
         self._render()
         self.path_var.set(self.path)
 
@@ -234,7 +214,7 @@ class FileManager(ctk.CTkFrame):
         if not self.history:
             return
         self.path = self.history.pop()
-        self._load_sample(self.path)    # replace with backend list
+        self.load_directory(self.path)    # replace with backend list
         self._render()
         self.path_var.set(self.path)
 
@@ -352,6 +332,8 @@ class FileManager(ctk.CTkFrame):
         else:
             # TODO: implement file open behavior (preview / external app)
             print(f"[open_item] would open: {name} (type={kind})")
+            if (kind == "text"):
+                self.on_text_file(f"{self.path.strip("/")}/{name}")
 
     # --- List row ---------------------------------------------------------
     def _row_list(self, kind, name, size, date):
@@ -373,8 +355,10 @@ class FileManager(ctk.CTkFrame):
                          ).pack(side="left")
 
         def on_click():
+            if (self.selected == (kind, name)):
+                self._open_item(kind, name)
             self._select_widget(row, kind, name)
-            self._open_item(kind, name)
+            self.parent.after(500, lambda: setattr(self, "selected", None))
 
         # Button in rounded container (kept for accessibility) — clicking
         # anywhere on the row will also trigger the same action.
@@ -438,8 +422,10 @@ class FileManager(ctk.CTkFrame):
                          ).pack(padx=16, pady=(20,10))
 
         def on_click():
+            if (self.selected == (kind, name)):
+                self._open_item(kind, name)
             self._select_widget(cell, kind, name)
-            self._open_item(kind, name)
+            self.parent.after(500, lambda: setattr(self, "selected", None))
 
 
         # Button in rounded container (kept for accessibility). Also bind
@@ -485,7 +471,7 @@ class FileManager(ctk.CTkFrame):
         return cell
 
     # --- Public backend hook ---------------------------------------------
-    def load_directory(self, path: str, items=None):
+    def load_directory(self, path: str):
         """
         Replace demo data with your cloud listing.
         items: iterable of { 'name': str, 'is_dir': bool, 'size': '2 KB', 'date': 'YYYY-MM-DD' }
@@ -495,14 +481,17 @@ class FileManager(ctk.CTkFrame):
             self.path = path
         self.path_var.set(self.path)
 
+        root:dict = self.firebase.get_owned_files(self.user)
+        for directory in self.path.strip("/").split("/"):
+            if (len(directory) > 1):
+                root = root.get(directory, {})
+        
+        self.entries.clear()
+        for name in root.keys():
+            parsed_name = name.replace("&123", ".")
+            kind = _guess_type(parsed_name, 'type' not in root.get(name, {}))
+            self.entries.append((kind, parsed_name, '-', ""))
 
-        if items is not None:
-            self.entries = []
-            for it in items:
-                kind = _guess_type(it["name"], it.get("is_dir", False))
-                self.entries.append((kind, it["name"], it.get("size","-"), it.get("date","")))
-        else:
-            self._load_sample(self.path)
         self._render()
 
     def delete_selected(self):

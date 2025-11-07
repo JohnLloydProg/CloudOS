@@ -1,4 +1,7 @@
 import customtkinter as ctk
+from editor_tk import EditorApp
+from firebase import Firebase
+from objects import User
 from PIL import Image
 from desktop.file_manager import FileManager
 import math, time
@@ -11,11 +14,13 @@ WINDOW_HEIGHT_RATIO = 0.80
 
 class Desktop(ctk.CTkFrame):
     """Desktop with bg image and a closeable floating window."""
-    def __init__(self, parent):
+    def __init__(self, parent, firebase:Firebase, user:User):
         # Use transparent background so rounded child windows show the
         # desktop background image — this prevents dark/black bleed in the
         # rounded corners.
         super().__init__(parent, fg_color="transparent")
+        self.firebase = firebase
+        self.user = user
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
@@ -139,8 +144,17 @@ class Desktop(ctk.CTkFrame):
         self.show_window()
         if self.active:
             self.active.destroy()
-        self.active = FileManager(self.client)
+        self.active = FileManager(self.client, self.firebase, self.user, self.show_text_editor)
         self.active.pack(fill="both", expand=True)
+    
+    def show_text_editor(self, cloud_path=None):
+        self.show_window()
+        if self.active:
+            self.active.destroy()
+        root = ctk.CTkFrame(self.client)
+        EditorApp(self, root, self.firebase, self.user, cloud_path)
+        self.active = root
+        self.active.pack(fill='both', expand=True)
 
     # --- Animations -------------------------------------------------------
     def _animate_slide_in(self, duration=250, fps=30, offset=0.05):

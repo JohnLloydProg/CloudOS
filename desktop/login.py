@@ -1,4 +1,5 @@
 import customtkinter as ctk
+from firebase import Firebase
 from PIL import Image
 from tkinter import font as tkfont
 
@@ -12,9 +13,10 @@ TEXT_1  = "#5b7a4a"
 TEXT_2  = "#8aaa7a"   
 
 class LoginWindow(ctk.CTkFrame):
-    def __init__(self, master, on_success=None):
+    def __init__(self, master, firebase:Firebase, on_success=None):
         super().__init__(master, fg_color="transparent")
         self.on_success = on_success
+        self.firebase = firebase
 
         # Make this frame fill the root
         master.grid_rowconfigure(0, weight=1)
@@ -219,17 +221,16 @@ class LoginWindow(ctk.CTkFrame):
     # --- Login logic ------------------------------------------------------
     def _on_login(self):
         """Handle login click. Accept any credentials for now."""
-        user = self.username_var.get().strip()
+        email = self.username_var.get().strip()
         pwd = self.password_var.get()
 
-        if not user:
-            self.info.configure(text="Enter any username to continue.")
-            return
+        user = self.firebase.login(email, pwd)
 
-        if callable(self.on_success):
+        if callable(self.on_success) and user:
             try:
                 # Let app.py decide what to do (and when to destroy this frame)
-                self.on_success(user, pwd)
+                self.firebase.clean_at_exit(user)
+                self.on_success(user)
             except Exception as e:
                 self.info.configure(text=f"Login callback error: {e}")
                 return

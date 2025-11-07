@@ -10,11 +10,11 @@ from locks import acquire_shared_lock, acquire_exclusive_lock, release_lock
 from fileops import safe_read, safe_write
 
 class EditorApp:
-    def __init__(self, root, firebase: Firebase = None, user: User = None):
+    def __init__(self, desktop, root, firebase: Firebase = None, user: User = None, cloud_path=None):
         self.root = root
         self.firebase = firebase
         self.user = user
-        root.title("CloudOS Editor")
+        self.desktop = desktop
 
         # Create main container
         main_container = ttk.PanedWindow(root, orient='horizontal')
@@ -70,6 +70,8 @@ class EditorApp:
         # Initialize cloud file tree
         if self.firebase and self.user:
             self.refresh_cloud_files()
+            if (cloud_path):
+                self._open_cloud_file(cloud_path)
 
     def open_file_dialog(self):
         # Close current file if open
@@ -333,6 +335,8 @@ class EditorApp:
         """Close the current file (public method for Close button)"""
         self._close_current_file()
         self._set_status("Ready")
+        self.desktop.close_window()
+        self.root.destroy()
 
     def _set_status(self, text):
         self.root.after(0, lambda: self.status.config(text=text))

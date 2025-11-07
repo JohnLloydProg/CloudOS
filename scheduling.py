@@ -3,6 +3,7 @@ import google.auth.transport.requests
 from google.oauth2 import service_account
 from decorators import connection_try_decorator
 from datetime import datetime
+from time import sleep
 import logging
 import requests
 import math
@@ -226,6 +227,7 @@ class Computer:
                         self.current_process = self.select_from_mlfq()
             else:
                 self.current_process = self.select_from_mlfq()
+            sleep(0.5)
     
     def select_from_mlfq(self) -> Process:
         for priority in range(1, 4):
