@@ -135,5 +135,8 @@ class Firebase:
     
     def get_thread(self, user:User, cloud_path:str, on_finish:Callable):
         CustomThread(self.get_file, args=(user, cloud_path), on_finish=on_finish).start()
+    
+    def update_thread(self, user:User, cloud_path:str, file_path:str, on_finish:Callable):
+        CustomThread(self.update_file, args=(user, cloud_path, file_path), on_finish=on_finish)
 
 
