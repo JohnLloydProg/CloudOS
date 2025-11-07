@@ -1,6 +1,6 @@
 import customtkinter as ctk
 from PIL import Image
-from file_manager import FileManager
+from desktop.file_manager import FileManager
 import math, time
 
 WINDOW_W, WINDOW_H = 1040, 600   # default fallback size
