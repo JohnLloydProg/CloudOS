@@ -140,10 +140,7 @@ def main():
 
         # wire taskbar callbacks
         if hasattr(taskbar, "on_toggle_files"):
-            taskbar.on_toggle_files = (
-                lambda active: desktop.show_file_manager()
-                if active else desktop.close_window()
-            )
+            taskbar.on_toggle_files = lambda: desktop.close_window() if desktop.active else desktop.show_file_manager()
         if hasattr(taskbar, "on_logout"):
             taskbar.on_logout = logout_to_login
         if hasattr(taskbar, "on_shutdown"):

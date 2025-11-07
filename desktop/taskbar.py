@@ -40,9 +40,8 @@ class Taskbar(ctk.CTkFrame):
 
     # --- Button handlers -------------------------------------------------
     def _toggle_files(self):
-        self.files_active = not self.files_active
         if callable(self.on_toggle_files):
-            self.on_toggle_files(self.files_active)
+            self.on_toggle_files()
         self._style_files_button()
 
     def _logout(self):

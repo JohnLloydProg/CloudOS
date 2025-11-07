@@ -15,6 +15,7 @@ class EditorApp:
         self.firebase = firebase
         self.user = user
         self.desktop = desktop
+        self.cloud_path = cloud_path
 
         # Create main container
         main_container = ttk.PanedWindow(root, orient='horizontal')
@@ -34,7 +35,6 @@ class EditorApp:
         tree_buttons.pack(fill='x')
         ttk.Button(tree_buttons, text="Refresh", command=self.refresh_cloud_files).pack(side='left')
         ttk.Button(tree_buttons, text="Upload", command=self.upload_file_dialog).pack(side='left')
-        ttk.Button(tree_buttons, text="Delete", command=self.delete_selected).pack(side='left')
 
         # Right side: Editor
         right_frame = ttk.Frame(main_container)
@@ -71,7 +71,8 @@ class EditorApp:
         if self.firebase and self.user:
             self.refresh_cloud_files()
             if (cloud_path):
-                self._open_cloud_file(cloud_path)
+                if ('.txt' in cloud_path):
+                    self._open_cloud_file(cloud_path)
 
     def open_file_dialog(self):
         # Close current file if open
@@ -354,13 +355,14 @@ class EditorApp:
         def add_items(parent, items):
             for key, value in items.items():
                 key = key.replace("&123", ".")
-                if isinstance(value, dict) and 'type' not in value:
-                    # Directory
-                    folder = self.tree.insert(parent, 'end', text=key, open=False)
-                    add_items(folder, value)
-                else:
-                    # File
-                    self.tree.insert(parent, 'end', text=key, values=('file',))
+                if isinstance(value, dict):
+                    if value.get('type') == 'folder':
+                        # Directory
+                        folder = self.tree.insert(parent, 'end', text=key, open=False)
+                        add_items(folder, value)
+                    else:
+                        # File
+                        self.tree.insert(parent, 'end', text=key, values=('file',))
         
         add_items('', root)
 

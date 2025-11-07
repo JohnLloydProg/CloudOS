@@ -1,5 +1,6 @@
 import customtkinter as ctk
 from typing import Callable
+from tkinter import filedialog, simpledialog
 from firebase import Firebase
 from objects import User
 from PIL import Image, ImageOps
@@ -81,6 +82,7 @@ class FileManager(ctk.CTkFrame):
         self.user = user
         self.parent = parent
         self.on_text_file = on_text_file
+        self.clicked = None
 
         # Fonts (create after root exists)
                 # Fonts (create after root exists)
@@ -133,8 +135,10 @@ class FileManager(ctk.CTkFrame):
         # 3 columns: [Back] [Address (expands)] [View toggles]
         bar.grid_columnconfigure(0, weight=0)
         bar.grid_columnconfigure(1, weight=0)
-        bar.grid_columnconfigure(2, weight=1)   # address expands
+        bar.grid_columnconfigure(2, weight=0)
         bar.grid_columnconfigure(3, weight=0)
+        bar.grid_columnconfigure(4, weight=1)   # address expands
+        bar.grid_columnconfigure(5, weight=0)
 
         # Back
         self.btn_back = ctk.CTkButton(
@@ -158,11 +162,39 @@ class FileManager(ctk.CTkFrame):
         )
         self.delete_btn.grid(row=0, column=1, padx=(4, 2), pady=10, sticky="w")
 
+        self.upload_btn = ctk.CTkButton(
+            bar,
+            text="↑",
+            width=40,                 
+            height=30,
+            fg_color=GREEN_1,   
+            hover_color="#eef6ec",    
+            text_color=TEXT_1,
+            font=self.FONT_UI_SM,
+            corner_radius=12,
+            command=self.upload,
+        )
+        self.upload_btn.grid(row=0, column=2, padx=(4, 2), pady=10, sticky="w")
+
+        self.folder_btn = ctk.CTkButton(
+            bar,
+            text="📁",
+            width=40,                 
+            height=30,
+            fg_color=GREEN_1,   
+            hover_color="#eef6ec",    
+            text_color=TEXT_1,
+            font=self.FONT_UI_SM,
+            corner_radius=12,
+            command=self.create_folder,
+        )
+        self.folder_btn.grid(row=0, column=3, padx=(4, 2), pady=10, sticky="w")
+
 
 
         # Address (full-width, read-only entry inside a rounded container)
         addr_wrap = ctk.CTkFrame(bar, fg_color=GREEN_1, corner_radius=12)
-        addr_wrap.grid(row=0, column=2, sticky="ew", padx=8, pady=6)
+        addr_wrap.grid(row=0, column=4, sticky="ew", padx=8, pady=6)
         addr_wrap.grid_columnconfigure(0, weight=1)
 
         self.path_var = ctk.StringVar(value=self.path)
@@ -176,7 +208,7 @@ class FileManager(ctk.CTkFrame):
 
         # View toggles
         toggle = ctk.CTkFrame(bar, fg_color="transparent")
-        toggle.grid(row=0, column=3, padx=(8,10))
+        toggle.grid(row=0, column=5, padx=(8,10))
         ctk.CTkButton(toggle, text="☷", width=32, height=28, font=self.FONT_UI_SM,
                     fg_color=GREEN_1, hover_color="#eef6ec", text_color=TEXT_1,
                     corner_radius=10, command=lambda: self._switch("list")
@@ -319,6 +351,7 @@ class FileManager(ctk.CTkFrame):
 
         self._selected_widget = widget
         self.selected = (kind, name)
+        self.clicked = (kind, name)
 
         try:
             widget.configure(fg_color="#dbead9")
@@ -355,10 +388,10 @@ class FileManager(ctk.CTkFrame):
                          ).pack(side="left")
 
         def on_click():
-            if (self.selected == (kind, name)):
+            if (self.clicked == (kind, name)):
                 self._open_item(kind, name)
             self._select_widget(row, kind, name)
-            self.parent.after(500, lambda: setattr(self, "selected", None))
+            self.parent.after(500, lambda: setattr(self, "clicked", None))
 
         # Button in rounded container (kept for accessibility) — clicking
         # anywhere on the row will also trigger the same action.
@@ -422,10 +455,10 @@ class FileManager(ctk.CTkFrame):
                          ).pack(padx=16, pady=(20,10))
 
         def on_click():
-            if (self.selected == (kind, name)):
+            if (self.clicked == (kind, name)):
                 self._open_item(kind, name)
             self._select_widget(cell, kind, name)
-            self.parent.after(500, lambda: setattr(self, "selected", None))
+            self.parent.after(500, lambda: setattr(self, "clicked", None))
 
 
         # Button in rounded container (kept for accessibility). Also bind
@@ -485,12 +518,13 @@ class FileManager(ctk.CTkFrame):
         for directory in self.path.strip("/").split("/"):
             if (len(directory) > 1):
                 root = root.get(directory, {})
-        
+
         self.entries.clear()
         for name in root.keys():
-            parsed_name = name.replace("&123", ".")
-            kind = _guess_type(parsed_name, 'type' not in root.get(name, {}))
-            self.entries.append((kind, parsed_name, '-', ""))
+            if (name != 'type'):
+                parsed_name = name.replace("&123", ".")
+                kind = _guess_type(parsed_name, root.get(name, {}).get('type') == 'folder')
+                self.entries.append((kind, parsed_name, '-', ""))
 
         self._render()
 
@@ -501,32 +535,33 @@ class FileManager(ctk.CTkFrame):
             return
 
         kind, name = self.selected
-
+        cloud_path = (self.path.rstrip("/") + "/" + name).strip("/")
         if kind == "folder":
-            print("[FileManager] Folder deletion not supported yet.")
-            return
-
-        # If Firebase is not wired yet, just remove from local entries (demo mode)
-        if not self.fb or not self.user:
-            self.entries = [
-                (k, n, s, d)
-                for (k, n, s, d) in self.entries
-                if not (k == kind and n == name)
-            ]
-            self.selected = None
-            self._selected_widget = None
-            self._render()
-            print(f"[FileManager] (demo) Removed '{name}' from view.")
+            self.firebase.delete_folder(self.user, name, self.path)
+            self.master.after(200, lambda: self.load_directory(self.path))
             return
 
         # --- Real Firebase delete (when fb/user are set) -------------------
-        cloud_path = (self.path.rstrip("/") + "/" + name).strip("/")
         try:
-            self.fb.delete_file(self.user, cloud_path)
+            self.firebase.delete_owned_file(self.user, cloud_path)
             print(f"[FileManager] Deleted from Firebase: {cloud_path}")
+            self.master.after(200, lambda: self.load_directory(self.path))
         except Exception as e:
             print(f"[FileManager] Delete failed: {e}")
             return
 
         # Re-fetch directory from backend once you have that wired:
         # self.refresh_from_firebase()
+    
+    def upload(self):
+        path = filedialog.askopenfilename()
+        if not path:
+            return
+        
+        filename = os.path.basename(path)
+        self.firebase.upload_thread(self.user, (self.path.rstrip("/") + "/" + filename).strip("/"), path, on_finish=lambda result: self.load_directory(self.path))
+
+    def create_folder(self):
+        folder_name = simpledialog.askstring("Create folder", "File Name:")
+        self.firebase.create_folder(self.user, folder_name, self.path)
+        self.master.after(200, lambda: self.load_directory(self.path))

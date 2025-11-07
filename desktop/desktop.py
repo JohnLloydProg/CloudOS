@@ -139,6 +139,9 @@ class Desktop(ctk.CTkFrame):
         """Fade + slide out the floating window."""
         if self._window_visible:
             self._animate_slide_out(duration=120, fps=25, offset=0.03)
+        if self.active:
+            self.active.destroy()
+            self.active = None
 
     def show_file_manager(self):
         self.show_window()

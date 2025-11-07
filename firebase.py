@@ -116,16 +116,25 @@ class Firebase:
         files = self.db.child('users').child(user.localId).child('owned_files').get(token=user.idToken).val()
         return files if (files) else {}
     
-    @connection_try_decorator
+
     def file_is_owned(self, user:User, file_name:str, d:dict) -> bool:
         found = False
         for key in d.keys():
-            if 'type' not in d.get(key):
-                print(d.get(key))
-                found = self.file_is_owned(user, file_name, d.get(key))
+            if key != 'type':
+                if d.get(key).get('type') == 'folder':
+                    print(d.get(key))
+                    found = self.file_is_owned(user, file_name, d.get(key))
             if key == file_name:
                 return True
         return found
+
+    @connection_try_decorator
+    def create_folder(self, user:User, folder_name:str, cloud_path:str):
+        self.db.child('users').child(user.localId).child('owned_files').child(*tuple(cloud_path.replace(".", "&123").split("/"))).child(folder_name).set({'type':'folder'}, token=user.idToken)
+
+    @connection_try_decorator
+    def delete_folder(self, user:User, folder_name:str, cloud_path):
+        self.db.child('users').child(user.localId).child('owned_files').child(*tuple(cloud_path.replace(".", "&123").split("/"))).child(folder_name).set(None, token=user.idToken)
 
     @connection_try_decorator
     def get_access_list_ids(self, user:User) -> list[str]:
@@ -153,7 +162,7 @@ class Firebase:
     @connection_try_decorator
     def delete_owned_file(self, user:User, cloud_path:str):
         cloud_path = cloud_path.strip("/")
-        if (not self.file_is_owned(user, cloud_path.split("/")[-1], self.get_owned_file_ids(user).get('users'))):
+        if (not self.file_is_owned(user, cloud_path.replace(".", "&123").split("/")[-1], self.get_owned_files(user))):
             print("File is not owned by the user. Can't delete it")
             return
         self.storage.delete(f'files/{user.localId}/{cloud_path}', user.idToken)
