@@ -2,6 +2,7 @@ import pyrebase
 from objects import User
 from datetime import datetime
 from scheduling import Computer, UploadProcess, DownloadProcess
+from decorators import connection_try_decorator
 from typing import Callable
 from threading import Thread
 from time import sleep
@@ -50,6 +51,7 @@ class Firebase:
     def clean_at_exit(self, user:User):
         atexit.register(lambda: self.clean_locked_paths(user))
 
+    @connection_try_decorator
     def lock_path(self, user:User, cloud_path:str, operation:str):
         if (operation not in ['write', 'read']):
             raise ValueError(f"{operation} is among the list of operations allowed to lock")
@@ -67,6 +69,7 @@ class Firebase:
         self.lock_refs.append(lock_ref)
         return lock_ref
 
+    @connection_try_decorator
     def unlock_path(self, user:User, lock_ref:str):
         self.db.child("locks").child(user.localId).child(lock_ref).set(None, token=user.idToken)
 
@@ -74,16 +77,19 @@ class Firebase:
         for lock_ref in self.lock_refs:
             self.unlock_path(user, lock_ref)
 
+    @connection_try_decorator
     def login(self, email:str, password:str) -> User:
         result = self.auth.sign_in_with_email_and_password(email, password)
         user = User(email, password)
         user.setup_account(result)
         return user
     
+    @connection_try_decorator
     def register(self, user:User):
         result = self.auth.create_user_with_email_and_password(user.email, user.password)
         user.setup_account(result)
     
+    @connection_try_decorator
     def upload_file(self, user:User, cloud_path:str, file_path:str):
         cloud_path = cloud_path.strip("/")
         path = cloud_path.split("/")
@@ -103,10 +109,12 @@ class Firebase:
         self.db.child('users').child(user.localId).child('owned_files').child(*tuple(path)).update(data, token=user.idToken)
         self.unlock_path(user, lock_ref)
 
+    @connection_try_decorator
     def get_owned_files(self, user:User) -> dict:
         files = self.db.child('users').child(user.localId).child('owned_files').get(token=user.idToken).val()
         return files if (files) else {}
     
+    @connection_try_decorator
     def file_is_owned(self, user:User, file_name:str, d:dict) -> bool:
         found = False
         for key in d.keys():
@@ -117,10 +125,12 @@ class Firebase:
                 return True
         return found
 
+    @connection_try_decorator
     def get_access_list_ids(self, user:User) -> list[str]:
         files = self.db.child('users').child(user.localId).child('access_list').get(token=user.idToken).val()
         return files if (files) else []
 
+    @connection_try_decorator
     def update_file(self, user:User, cloud_path:str, file_path:str):
         cloud_path = cloud_path.strip("/")
 
@@ -138,6 +148,7 @@ class Firebase:
         
         self.unlock_path(user, lock_ref)
 
+    @connection_try_decorator
     def delete_owned_file(self, user:User, cloud_path:str):
         cloud_path = cloud_path.strip("/")
         if (not self.file_is_owned(user, cloud_path.split("/")[-1], self.get_owned_file_ids(user).get('users'))):
@@ -147,7 +158,7 @@ class Firebase:
         self.db.child('users').child(user.localId).child('owned_files').child(*tuple(cloud_path.replace(".", "&123").split("/"))).set(None, token=user.idToken)
         print("File is deleted")
 
-
+    @connection_try_decorator
     def get_file(self, user:User, cloud_path:str) -> str:
         cloud_path = cloud_path.strip("/")
         file = self.db.child('users').child(user.localId).child('owned_files').child(*tuple(cloud_path.replace(".", "&123").split("/"))).get(token=user.idToken).val()
@@ -168,9 +179,11 @@ class Firebase:
                 return
             process = DownloadProcess(url, user, cloud_path)
             self.computer.add_process(process)
-            while (not process.is_completed()):
+            while (not process.is_completed() and not process.error):
                 sleep(0.5)
             self.unlock_path(user, lock_ref)
+            if (process.error):
+                return None
             try:
                 with open(f"{os.environ.get("CACHE_PATH")}/meta/{cloud_path.replace(".", "&123")}.json", 'w') as f:
                     f.write(json.dumps(file))
