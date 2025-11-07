@@ -13,12 +13,12 @@ thread.start()
 
 firebase = Firebase(computer)
 user = firebase.login("johnlloydunida0@gmail.com", "password")
-
+firebase.clean_at_exit(user)
 
 firebase.get_thread(user, 'hotdog.txt', lambda result: print(result))
 sleep(3)
-firebase.get_thread(user, 'documents/hello.txt', lambda result: print(result))
+firebase.get_thread(user, 'documents/minecraft.txt', lambda result:print(result))
 sleep(5)
-firebase.get_thread(user, 'documents/minecraft.txt', lambda result: print(result))
+firebase.get_thread(user, 'documents/hello.txt', lambda result: print(result))
 
 input("waiting... enter to end")

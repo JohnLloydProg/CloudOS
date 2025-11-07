@@ -1,6 +1,7 @@
 from objects import User
 import google.auth.transport.requests
 from google.oauth2 import service_account
+from decorators import connection_try_decorator
 from datetime import datetime
 import logging
 import requests
@@ -16,6 +17,8 @@ class Process:
     sub_wait_time:int = 0
     process_id:int = 0
     completed_time:float
+    completed:bool = False
+    error:bool = False
 
     def __init__(self, user:User, priority:int=3):
         self.user = user
@@ -50,7 +53,6 @@ class DownloadProcess(Process):
     process_type:str = "download"
     download_size:int = 1024
     current_downloaded:int = 0
-    completed:bool = False
 
     def __init__(self, download_link:str, user:User, file_name:str):
         super().__init__(user)
@@ -69,6 +71,7 @@ class DownloadProcess(Process):
             self.burst_time = math.ceil(int(total) / self.download_size)
             self.original_burst_time = math.ceil(int(total) / self.download_size)
 
+    @connection_try_decorator
     def process(self):
         r = requests.get(self.download_link, headers={"Authorization": "Bearer "+self.user.idToken, "Range":f"bytes={self.current_downloaded}-{self.current_downloaded+self.download_size-1}"})
         if (r.ok):
@@ -90,7 +93,6 @@ class UploadProcess(Process):
     upload_url:str
     upload_size:int = 262144
     current_uploaded:int = 0
-    completed:bool = False
     creds = service_account.Credentials.from_service_account_file('./cloudos-12cdc-firebase-adminsdk-fbsvc-9b35e8b6ff.json', scopes=["https://www.googleapis.com/auth/devstorage.full_control"])
 
     def __init__(self, firebase_bucket:str, user:User, file_name:str, file:str):
@@ -116,6 +118,7 @@ class UploadProcess(Process):
         else:
             raise Exception("Failed to initiate upload session")
 
+    @connection_try_decorator
     def process(self):
         if (self.upload_url):
             with open(self.file, 'rb') as f:
@@ -188,7 +191,9 @@ class Computer:
             #Processing the current process
             if (self.current_process):
                 self.current_process.process()
-                if (self.current_process.is_completed()):
+                if (self.current_process.error):
+                    self.current_process = self.select_from_mlfq()
+                elif (self.current_process.is_completed()):
                     self.logger.info(f"Process {self.current_process.process_id} type {self.current_process.process_type} finished processing")
                     turn_around_time = self.current_process.completed_time - self.current_process.arrival_time
                     waiting_time = turn_around_time - self.current_process.original_burst_time
