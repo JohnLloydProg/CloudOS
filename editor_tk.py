@@ -273,8 +273,11 @@ class EditorApp:
             return
         data = self.text.get('1.0', tk.END)
         self.save_btn.config(state='disabled')
+        self.close_btn.config(state='disabled')
+        self.root.protocol("WM_DELETE_WINDOW", self.disable_event)
         self._set_status("Saving...")
         self.progress.start()
+        filename = None
         if self.is_cloud_file and not self.current_cloud_path:
             filename =  simpledialog.askstring("Save", "File Name:")
             if not filename:
@@ -301,8 +304,6 @@ class EditorApp:
             # Don't re-acquire lock yet if we need to upload (upload needs file access)
             # We'll re-acquire after upload completes
             if self.is_cloud_file and self.firebase and self.user:
-                self.close_btn.config(state='disabled')
-                self.root.protocol("WM_DELETE_WINDOW", self.disable_event)
                 if self.current_cloud_path:
                     # update_file signature: update_file(user, cloud_path, file_path)
                     cloud_path = self.current_cloud_path
@@ -319,8 +320,6 @@ class EditorApp:
                     cloud_path = f"{self.cloud_path.strip("/")}/{filename.rstrip(".txt")}.txt"
                     # Upload while file is unlocked
                     self.firebase.upload_file(self.user, cloud_path, path)
-                self.root.protocol("WM_DELETE_WINDOW", self.root.destroy)
-                self.close_btn.config(state='normal')
                 self.refresh_cloud_files()
                 
                 # Now re-acquire the lock after upload completes
@@ -331,6 +330,8 @@ class EditorApp:
                 if lock_was_held:
                     self.lock = acquire_exclusive_lock(path, timeout=10)
             
+            self.root.protocol("WM_DELETE_WINDOW", self.root.destroy)
+            self.close_btn.config(state='normal')
             self._set_status("Saved")
         except Exception as e:
             self.root.after(0, lambda: messagebox.showerror("Save error", str(e)))
