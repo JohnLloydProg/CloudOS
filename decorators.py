@@ -2,6 +2,23 @@ from time import sleep
 from logging import getLogger
 import scheduling
 
+ENCODINGS = [
+    ('.', '&123'), ('$', '&456'), ('#', '&789'),
+    ('[', '&234'), (']', '&567'),
+]
+
+def encode_illegal_symbols(path:str) -> str:
+    result = path
+    for encoding in ENCODINGS:
+        result = result.replace(encoding[0], encoding[1])
+    return result
+
+def decode_illegal_symbols(path:str) -> str:
+    result = path
+    for encoding in ENCODINGS:
+        result = result.replace(encoding[1], encoding[0])
+    return result
+
 
 def connection_try_decorator(func):
     logger = getLogger()

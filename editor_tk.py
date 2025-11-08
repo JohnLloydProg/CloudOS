@@ -1,5 +1,6 @@
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox, ttk, simpledialog
+from decorators import decode_illegal_symbols
 import threading
 import os
 from firebase import Firebase, CustomThread
@@ -10,7 +11,7 @@ from locks import acquire_shared_lock, acquire_exclusive_lock, release_lock
 from fileops import safe_read, safe_write
 
 class EditorApp:
-    def __init__(self, desktop, root, firebase: Firebase = None, user: User = None, cloud_path=None):
+    def __init__(self, desktop, root, firebase: Firebase = None, user: User = None, cloud_path:str=None):
         self.root = root
         self.firebase = firebase
         self.user = user
@@ -34,7 +35,6 @@ class EditorApp:
         tree_buttons = ttk.Frame(left_frame)
         tree_buttons.pack(fill='x')
         ttk.Button(tree_buttons, text="Refresh", command=self.refresh_cloud_files).pack(side='left')
-        ttk.Button(tree_buttons, text="Upload", command=self.upload_file_dialog).pack(side='left')
 
         # Right side: Editor
         right_frame = ttk.Frame(main_container)
@@ -47,7 +47,6 @@ class EditorApp:
         toolbar = ttk.Frame(right_frame)
         toolbar.pack(fill='x')
         ttk.Button(toolbar, text="New", command=self.new_file_dialog).pack(side='left')
-        ttk.Button(toolbar, text="Open Local", command=self.open_file_dialog).pack(side='left')
         self.save_btn = ttk.Button(toolbar, text="Save", command=self.save, state='disabled')
         self.save_btn.pack(side='left')
         ttk.Button(toolbar, text="Close", command=self.close_file).pack(side='left')
@@ -73,6 +72,11 @@ class EditorApp:
             if (cloud_path):
                 if ('.txt' in cloud_path):
                     self._open_cloud_file(cloud_path)
+                else:
+                    self.is_cloud_file = True
+                    self.edit_mode = True
+                    safe_write('./holder.txt', '')
+                    self._open_file('./holder.txt')
 
     def open_file_dialog(self):
         # Close current file if open
@@ -132,22 +136,12 @@ class EditorApp:
             self._close_current_file()
             
         # Set initial directory to the CloudOS workspace
-        initial_dir = os.path.dirname(os.path.abspath(__file__))
-        path = filedialog.asksaveasfilename(
-            initialdir=initial_dir,
-            title="Create New File",
-            defaultextension=".txt",
-            filetypes=[
-                ("Text files", "*.txt"),
-                ("All files", "*.*")
-            ]
-        )
-        if not path:
-            return
+        path = './holder.txt'
+        safe_write(path, '')
         
         # Create the new file and open it in edit mode
         self.edit_mode = True
-        self.is_cloud_file = False
+        self.is_cloud_file = True
         self.current_cloud_path = None
         t = threading.Thread(target=self._open_file, args=(path,), daemon=True)
         t.start()
@@ -276,10 +270,14 @@ class EditorApp:
         self.save_btn.config(state='disabled')
         self._set_status("Saving...")
         self.progress.start()
-        t = threading.Thread(target=self._save_file, args=(self.current_path, data), daemon=True)
+        if self.is_cloud_file and not self.current_cloud_path:
+            filename =  simpledialog.askstring("Save", "File Name:")
+            if not filename:
+                return
+        t = threading.Thread(target=self._save_file, args=(self.current_path, data, filename), daemon=True)
         t.start()
 
-    def _save_file(self, path, data):
+    def _save_file(self, path, data, filename:str):
         try:
             # If we have an exclusive lock with portalocker, temporarily release it for writing
             lock_was_held = False
@@ -302,8 +300,13 @@ class EditorApp:
                     self.firebase.update_file(self.user, cloud_path, path)
                 else:
                     # New cloud file - upload_file signature: upload_file(user, cloud_path, file_path)
-                    filename = os.path.basename(path)
-                    cloud_path = f"documents/{filename}"
+                    if (not filename):
+                        if lock_was_held:
+                            self.lock = acquire_exclusive_lock(path, timeout=10)
+                        return
+                    if '.txt' in self.cloud_path:
+                        self.cloud_path = ".".join(self.cloud_path.split("/")[:-1])
+                    cloud_path = f"{self.cloud_path.strip("/")}/{filename.rstrip(".txt")}.txt"
                     # Upload while file is unlocked
                     self.firebase.upload_file(self.user, cloud_path, path)
                 self.refresh_cloud_files()
@@ -336,7 +339,6 @@ class EditorApp:
         """Close the current file (public method for Close button)"""
         self._close_current_file()
         self._set_status("Ready")
-        self.desktop.close_window()
         self.root.destroy()
 
     def _set_status(self, text):
@@ -351,10 +353,20 @@ class EditorApp:
         files = self.firebase.get_owned_files(self.user)
         # get_owned_files returns the owned_files dict directly, not wrapped
         root = files if files else {}
+        if self.cloud_path:
+            path = self.cloud_path.split("/")
+            if '.txt' in self.cloud_path:
+                path = path[:-1]
+        else:
+            path = root
+        
+        for directory in path:
+            if (len(directory) > 1):
+                root = root.get(directory, {})
         
         def add_items(parent, items):
             for key, value in items.items():
-                key = key.replace("&123", ".")
+                key = decode_illegal_symbols(key)
                 if isinstance(value, dict):
                     if value.get('type') == 'folder':
                         # Directory
@@ -381,7 +393,11 @@ class EditorApp:
         # Treeview returns values as a list, check if 'file' is in the values
         item_values = self.tree.item(selected[0])['values']
         if item_values and 'file' in item_values:
-            self._open_cloud_file('/'.join(path))
+            if '.txt' in self.cloud_path:
+                cloud_path = "/".join(self.cloud_path.split("/")[:-1])
+            else:
+                cloud_path = self.cloud_path
+            self._open_cloud_file(cloud_path+"/"+'/'.join(path))
 
     def _open_cloud_file(self, cloud_path):
         """Open a cloud file"""

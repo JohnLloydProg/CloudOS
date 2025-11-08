@@ -1,5 +1,6 @@
 from firebase import Firebase
 from scheduling import Computer
+from decorators import decode_illegal_symbols
 from objects import User
 from dotenv import load_dotenv
 from threading import Thread
@@ -25,7 +26,7 @@ while True:
     for directory in cur_dir:
         if (len(directory) > 1):
             root = root.get(directory, {})
-    keys = [(key.replace("&123", "."), 'f' if 'type' in root.get(key, {}) else 'd') for key in root.keys()]
+    keys = [(decode_illegal_symbols(key), 'f' if 'type' in root.get(key, {}) else 'd') for key in root.keys()]
     print('='*50)
     for i, file in enumerate(keys):
         print(f'[{str(i)}] {file[0]} ({file[1]})')

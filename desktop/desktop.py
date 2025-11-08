@@ -1,4 +1,5 @@
 import customtkinter as ctk
+import tkinter as tk
 from editor_tk import EditorApp
 from firebase import Firebase
 from objects import User
@@ -151,13 +152,15 @@ class Desktop(ctk.CTkFrame):
         self.active.pack(fill="both", expand=True)
     
     def show_text_editor(self, cloud_path=None):
-        self.show_window()
+        """self.show_window()
         if self.active:
-            self.active.destroy()
-        root = ctk.CTkFrame(self.client)
+            self.active.destroy()"""
+        root = tk.Tk()
+        root.geometry("1024x768")
         EditorApp(self, root, self.firebase, self.user, cloud_path)
-        self.active = root
-        self.active.pack(fill='both', expand=True)
+        root.mainloop()
+        """self.active = root
+        self.active.pack(fill='both', expand=True)"""
 
     # --- Animations -------------------------------------------------------
     def _animate_slide_in(self, duration=250, fps=30, offset=0.05):

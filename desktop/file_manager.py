@@ -1,6 +1,7 @@
 import customtkinter as ctk
 from typing import Callable
 from tkinter import filedialog, simpledialog
+from decorators import decode_illegal_symbols
 from firebase import Firebase
 from objects import User
 from PIL import Image, ImageOps
@@ -137,8 +138,9 @@ class FileManager(ctk.CTkFrame):
         bar.grid_columnconfigure(1, weight=0)
         bar.grid_columnconfigure(2, weight=0)
         bar.grid_columnconfigure(3, weight=0)
-        bar.grid_columnconfigure(4, weight=1)   # address expands
-        bar.grid_columnconfigure(5, weight=0)
+        bar.grid_columnconfigure(4, weight=0)
+        bar.grid_columnconfigure(5, weight=1)   # address expands
+        bar.grid_columnconfigure(6, weight=0)
 
         # Back
         self.btn_back = ctk.CTkButton(
@@ -190,11 +192,25 @@ class FileManager(ctk.CTkFrame):
         )
         self.folder_btn.grid(row=0, column=3, padx=(4, 2), pady=10, sticky="w")
 
+        self.editor_btn = ctk.CTkButton(
+            bar,
+            text="txt",
+            width=40,                 
+            height=30,
+            fg_color=GREEN_1,   
+            hover_color="#eef6ec",    
+            text_color=TEXT_1,
+            font=self.FONT_UI_SM,
+            corner_radius=12,
+            command=lambda: self.on_text_file(self.path),
+        )
+        self.editor_btn.grid(row=0, column=4, padx=(4, 2), pady=10, sticky="w")
+
 
 
         # Address (full-width, read-only entry inside a rounded container)
         addr_wrap = ctk.CTkFrame(bar, fg_color=GREEN_1, corner_radius=12)
-        addr_wrap.grid(row=0, column=4, sticky="ew", padx=8, pady=6)
+        addr_wrap.grid(row=0, column=5, sticky="ew", padx=8, pady=6)
         addr_wrap.grid_columnconfigure(0, weight=1)
 
         self.path_var = ctk.StringVar(value=self.path)
@@ -208,7 +224,7 @@ class FileManager(ctk.CTkFrame):
 
         # View toggles
         toggle = ctk.CTkFrame(bar, fg_color="transparent")
-        toggle.grid(row=0, column=5, padx=(8,10))
+        toggle.grid(row=0, column=6, padx=(8,10))
         ctk.CTkButton(toggle, text="☷", width=32, height=28, font=self.FONT_UI_SM,
                     fg_color=GREEN_1, hover_color="#eef6ec", text_color=TEXT_1,
                     corner_radius=10, command=lambda: self._switch("list")
@@ -522,7 +538,7 @@ class FileManager(ctk.CTkFrame):
         self.entries.clear()
         for name in root.keys():
             if (name != 'type'):
-                parsed_name = name.replace("&123", ".")
+                parsed_name = decode_illegal_symbols(name)
                 kind = _guess_type(parsed_name, root.get(name, {}).get('type') == 'folder')
                 self.entries.append((kind, parsed_name, '-', ""))
 
@@ -563,5 +579,7 @@ class FileManager(ctk.CTkFrame):
 
     def create_folder(self):
         folder_name = simpledialog.askstring("Create folder", "File Name:")
+        if not folder_name:
+            return
         self.firebase.create_folder(self.user, folder_name, self.path)
         self.master.after(200, lambda: self.load_directory(self.path))

@@ -1,5 +1,7 @@
 import customtkinter as ctk
+from tkinter import messagebox
 from firebase import Firebase
+from requests.exceptions import HTTPError
 from PIL import Image
 from tkinter import font as tkfont
 
@@ -223,8 +225,12 @@ class LoginWindow(ctk.CTkFrame):
         """Handle login click. Accept any credentials for now."""
         email = self.username_var.get().strip()
         pwd = self.password_var.get()
-
-        user = self.firebase.login(email, pwd)
+        
+        try:
+            user = self.firebase.login(email, pwd)
+        except HTTPError as e:
+            messagebox.showinfo("Authentication Failed!", "Wrong email or password! Please try again...")
+            user = None
 
         if callable(self.on_success) and user:
             try:
