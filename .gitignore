@@ -5,6 +5,8 @@
 /Lib
 /Scripts
 /share
+/build
+/dist
 
 .env
 *.json
