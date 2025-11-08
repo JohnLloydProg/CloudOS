@@ -17,7 +17,7 @@ class Process:
     sub_processed_time:int = 0
     sub_wait_time:int = 0
     process_id:int = 0
-    completed_time:float
+    completed_time:float = 0
     completed:bool = False
     error:bool = False
 

@@ -66,6 +66,7 @@ class EditorApp:
         cache_path = os.environ.get('CACHE_PATH', './file_cache')
         os.makedirs(cache_path, exist_ok=True)
         os.makedirs(os.path.join(cache_path, 'meta'), exist_ok=True)
+        self.root.protocol("WM_DELETE_WINDOW", self.close_file)
 
         # Initialize cloud file tree
         if self.firebase and self.user:
@@ -272,6 +273,8 @@ class EditorApp:
         if not self.current_path:
             return
         data = self.text.get('1.0', tk.END)
+        if len(data) == 0:
+            return
         self.save_btn.config(state='disabled')
         self.close_btn.config(state='disabled')
         self.root.protocol("WM_DELETE_WINDOW", self.disable_event)
@@ -285,7 +288,7 @@ class EditorApp:
         t = threading.Thread(target=self._save_file, args=(self.current_path, data, filename), daemon=True)
         t.start()
     
-    def disable_event():
+    def disable_event(self):
         pass
 
     def _save_file(self, path, data, filename:str):
@@ -311,10 +314,6 @@ class EditorApp:
                     self.firebase.update_file(self.user, cloud_path, path)
                 else:
                     # New cloud file - upload_file signature: upload_file(user, cloud_path, file_path)
-                    if (not filename):
-                        if lock_was_held:
-                            self.lock = acquire_exclusive_lock(path, timeout=10)
-                        return
                     if '.txt' in self.cloud_path:
                         self.cloud_path = ".".join(self.cloud_path.split("/")[:-1])
                     cloud_path = f"{self.cloud_path.strip("/")}/{filename.rstrip(".txt")}.txt"
@@ -330,7 +329,7 @@ class EditorApp:
                 if lock_was_held:
                     self.lock = acquire_exclusive_lock(path, timeout=10)
             
-            self.root.protocol("WM_DELETE_WINDOW", self.root.destroy)
+            self.root.protocol("WM_DELETE_WINDOW", self.close_file)
             self.close_btn.config(state='normal')
             self._set_status("Saved")
         except Exception as e:
@@ -424,6 +423,8 @@ class EditorApp:
         mode = messagebox.askquestion("Mode", "Open in edit mode? (No = read-only)", icon='question')
         self.edit_mode = (mode == 'yes')
         
+        self.close_btn.config(state='disabled')
+        self.root.protocol("WM_DELETE_WINDOW", self.disable_event)
         self._set_status(f"Loading {os.path.basename(cloud_path)}...")
         self.progress.start()
         
@@ -447,6 +448,8 @@ class EditorApp:
     
     def _on_cloud_file_loaded(self, result):
         """Callback when cloud file load completes"""
+        self.root.protocol("WM_DELETE_WINDOW", self.close_file)
+        self.close_btn.config(state='normal')
         if result['success']:
             # Open the cached file with proper locking
             self._open_file(result['path'])

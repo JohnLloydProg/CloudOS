@@ -573,7 +573,9 @@ class FileManager(ctk.CTkFrame):
         path = filedialog.askopenfilename()
         if not path:
             return
-        
+        with open(path, 'rb') as f:
+            if (len(f.read()) == 0):
+                return
         filename = os.path.basename(path)
         self.firebase.upload_thread(self.user, (self.path.rstrip("/") + "/" + filename).strip("/"), path, on_finish=lambda result: self.load_directory(self.path))
 
