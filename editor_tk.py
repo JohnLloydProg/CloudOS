@@ -49,7 +49,8 @@ class EditorApp:
         ttk.Button(toolbar, text="New", command=self.new_file_dialog).pack(side='left')
         self.save_btn = ttk.Button(toolbar, text="Save", command=self.save, state='disabled')
         self.save_btn.pack(side='left')
-        ttk.Button(toolbar, text="Close", command=self.close_file).pack(side='left')
+        self.close_btn = ttk.Button(toolbar, text="Close", command=self.close_file)
+        self.pack(side='left')
         self.progress = ttk.Progressbar(toolbar, mode='indeterminate', length=100)
         self.progress.pack(side='right', padx=5)
         self.status = ttk.Label(toolbar, text="Ready")
@@ -75,7 +76,11 @@ class EditorApp:
                 else:
                     self.is_cloud_file = True
                     self.edit_mode = True
-                    safe_write('./holder.txt', '')
+                    try:
+                        safe_write('./holder.txt', '')
+                    except OSError:
+                        self.root.destroy()
+                        return
                     self._open_file('./holder.txt')
 
     def open_file_dialog(self):
@@ -276,6 +281,9 @@ class EditorApp:
                 return
         t = threading.Thread(target=self._save_file, args=(self.current_path, data, filename), daemon=True)
         t.start()
+    
+    def disable_event():
+        pass
 
     def _save_file(self, path, data, filename:str):
         try:
@@ -293,6 +301,8 @@ class EditorApp:
             # Don't re-acquire lock yet if we need to upload (upload needs file access)
             # We'll re-acquire after upload completes
             if self.is_cloud_file and self.firebase and self.user:
+                self.close_btn.config(state='disabled')
+                self.root.protocol("WM_DELETE_WINDOW", lambda: self.disable_event())
                 if self.current_cloud_path:
                     # update_file signature: update_file(user, cloud_path, file_path)
                     cloud_path = self.current_cloud_path
@@ -309,6 +319,7 @@ class EditorApp:
                     cloud_path = f"{self.cloud_path.strip("/")}/{filename.rstrip(".txt")}.txt"
                     # Upload while file is unlocked
                     self.firebase.upload_file(self.user, cloud_path, path)
+                self.close_btn.config(state='normal')
                 self.refresh_cloud_files()
                 
                 # Now re-acquire the lock after upload completes
